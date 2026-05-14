@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Business Analytics Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p>Processing...</p>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">⚡ Smart Analytics</div>
+      <div class="sidebar-version">ENTERPRISE EDITION · v4.0</div>
+    </div>
+    <div class="sidebar-section">📁 Data Upload</div>
+    <div id="uploadZone" class="upload-zone">
+      <div class="upload-zone-icon">📂</div>
+      <div class="upload-zone-text">Drop files here or click</div>
+      <div class="upload-zone-hint">CSV, Excel, JSON, XML, Parquet</div>
+      <input id="fileInput" type="file" multiple accept=".csv,.xlsx,.xls,.json,.xml,.parquet,.txt" />
+    </div>
+    <div id="fileBadges" class="sidebar-files"></div>
+    <div class="sidebar-section">📊 Loaded Datasets</div>
+    <div class="sidebar-stats">
+      <div class="stat-box"><div class="label">Datasets</div><div class="value" id="statDatasets">0</div></div>
+      <div class="stat-box"><div class="label">Columns</div><div class="value" id="statColumns">0</div></div>
+      <div class="stat-box full"><div class="label">Total Records</div><div class="value" id="statRecords">0</div></div>
+    </div>
+    <div class="sidebar-section">🤖 AI Engine</div>
+    <div id="llmStatus" class="llm-status offline"><span class="dot"></span> Checking...</div>
+  </aside>
+
+  <main class="main">
+    <div class="hero-banner">
+      <div class="hero-content">
+        <div class="hero-icon">⚡</div>
+        <div class="hero-text">
+          <h1>Smart Business Analytics</h1>
+          <p>Multi-Agent AI Analytics System · Graduation Project 2026</p>
+        </div>
+        <div class="hero-pill"><span class="dot"></span> ENTERPRISE EDITION</div>
+      </div>
+    </div>
+
+    <div id="statusMessage" class="hidden"></div>
+    <div id="viewMessage"></div>
+
+    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="runPipeline()">🚀 Run Agent Pipeline</button>
+      <button class="btn btn-secondary" onclick="downloadPDF()">📥 Export PDF Report</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="kpi">📈 KPIs</button>
+      <button class="tab" data-tab="viz">📊 Visualizations</button>
+      <button class="tab" data-tab="outliers">🛡️ Outliers</button>
+      <button class="tab" data-tab="anomaly">🤖 Anomaly Detection</button>
+      <button class="tab" data-tab="insight">🧠 AI Insights</button>
+      <button class="tab" data-tab="prep">🧹 Preprocessing</button>
+      <button class="tab" data-tab="rec">💡 Recommender</button>
+      <button class="tab" data-tab="logs">📋 Agent Logs</button>
+      <button class="tab" data-tab="data">👀 Data Preview</button>
+    </div>
+
+    <div id="panel-kpi" class="tab-panel">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">📈 Key Performance Indicators</h2>
+      <div id="kpiContent"><p style="color:var(--text-muted);padding:20px;">Upload data and run the pipeline to see KPIs.</p></div>
+    </div>
+
+    <div id="panel-viz" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">📊 Agent-Powered Visualizations</h2>
+      <div id="chartContent"><p style="color:var(--text-muted);">Run the pipeline to see charts.</p></div>
+    </div>
+
+    <div id="panel-outliers" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">🛡️ Outlier Report</h2>
+      <div class="card"><div id="outlierContent"><p style="color:var(--text-muted);">Run the pipeline to detect outliers.</p></div></div>
+    </div>
+
+    <div id="panel-anomaly" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">🤖 ML Anomaly Detection</h2>
+      <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:16px;">Runs Isolation Forest across datasets. Datasets sharing common numeric columns are analyzed jointly.</p>
+      <div id="anomalyContent"></div>
+    </div>
+
+    <div id="panel-insight" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">🧠 AI Business Insight Reports</h2>
+      <div id="insightContent"><p style="color:var(--text-muted);">Run the pipeline to generate insights.</p></div>
+    </div>
+
+    <div id="panel-prep" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">🧹 Preprocessing Log</h2>
+      <div class="card"><div id="prepReport"><p style="color:var(--text-muted);">Upload data to see preprocessing report.</p></div></div>
+    </div>
+
+    <div id="panel-rec" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">💡 Smart Recommender System</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card">
+          <div class="card-title">🔍 1. Find Similar Profiles (ML)</div>
+          <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:12px;">Discover similar records based on Cosine Similarity.</p>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">Dataset:</label>
+            <select id="dsSelect" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;"></select>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">Row Index:</label>
+            <input type="number" id="rowIndex" value="0" min="0" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;" />
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="findSimilar()">🔎 Find Similar Records</button>
+          <div id="similarResults"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">📥 2. Export Executive Report</div>
+          <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:12px;">Generate a PDF with AI insights, recommendations, and charts.</p>
+          <button class="btn btn-primary btn-sm" onclick="downloadPDF()">⚙️ Compile &amp; Download PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-logs" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">📋 Agent Pipeline Logs</h2>
+      <div id="logsContent"><p style="color:var(--text-muted);">Run the pipeline to see agent logs.</p></div>
+    </div>
+
+    <div id="panel-data" class="tab-panel hidden">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">👀 Data Preview</h2>
+      <div id="dataPreview"><p style="color:var(--text-muted);">Upload data to see preview.</p></div>
+    </div>
+
+    <footer style="border-top:1px solid var(--border-subtle);padding:20px 0;margin-top:40px;display:flex;justify-content:space-between;">
+      <p style="color:var(--text-muted);font-size:0.78rem;">© 2026 Smart Business Analytics Dashboard · Graduation Project</p>
+      <p style="color:var(--text-muted);font-size:0.78rem;">Built with ⚡ by Team</p>
+    </footer>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
