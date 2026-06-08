@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any
 
 import pandas as pd
 import numpy as np
+import plotly.express as px
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -18,10 +19,21 @@ from agents_core import (
     ask_llama, RecommenderAgent, SUPPORTED_FILE_TYPES,
     UPLOAD_DIR, CHART_DIR, PDF_MAX_CHARTS,
     build_views, is_triple_view, get_view_keys,
-    VIEW_A, VIEW_B, VIEW_INTERSECTION
+    VIEW_A, VIEW_B, VIEW_INTERSECTION,
+    style_fig, PLOTLY_LAYOUT, CHART_PALETTE,
+    HISTOGRAM_BINS, PIE_MAX_CATEGORIES, BAR_TOP_N,
 )
+from pandas.api.types import is_numeric_dtype
 
 app = FastAPI(title="Smart Business Analytics Dashboard", version="4.0")
+
+# Global catch-all: ensure every error returns JSON, never HTML
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    import traceback
+    tb = traceback.format_exc()
+    print(f"\n=== GLOBAL ERROR ===\n{tb}\n===================\n", flush=True)
+    return JSONResponse(status_code=500, content={"detail": f"Server error: {type(exc).__name__}: {exc}"})
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,7 +64,7 @@ def _load_file(file_path: str) -> Optional[pd.DataFrame]:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "llm": check_llm_health()}
+    return {"status": "ok", "llm": check_llm_health(), "version": "4.1-insight-rebuild"}
 
 
 @app.post("/api/upload")
@@ -148,33 +160,44 @@ def data_preview(session_id: str, dataset: str = "", rows: int = 10):
 
 @app.post("/api/pipeline/run")
 def run_pipeline(session_id: str = Form(...), run_insight: bool = Form(False)):
-    sess = sessions.get(session_id)
-    if not sess: raise HTTPException(404, "Session not found")
-    views = sess.get("views", {})
-    if not views: raise HTTPException(400, "No views found. Upload and preprocess first.")
-    view_titles = sess.get("view_titles", {})
+    try:
+        sess = sessions.get(session_id)
+        if not sess: raise HTTPException(404, "Session not found")
+        views = sess.get("views", {})
+        if not views: raise HTTPException(400, "No views found. Upload and preprocess first.")
+        view_titles = sess.get("view_titles", {})
 
-    results_by_view = {}
-    view_keys = list(views.keys())
-    orch = Orchestrator()
+        results_by_view = {}
+        view_keys = list(views.keys())
+        orch = Orchestrator()
 
-    for vk in view_keys:
-        view_datasets = views[vk]
-        results = orch.run(view_datasets)
-        if run_insight:
-            insight_result = orch.run_insight(results, view_datasets)
-            results["insight"] = insight_result
-            rec = RecommenderAgent().run(insight_result["output"])
-            results["recommender"] = rec
-        results_by_view[vk] = results
+        print(f"\n--- Pipeline starting: {len(view_keys)} view(s), run_insight={run_insight} ---", flush=True)
 
-    sess["results_by_view"] = results_by_view
-    return {
-        "status": "complete",
-        "views": list(results_by_view.keys()),
-        "view_titles": view_titles,
-        "triple_mode": is_triple_view(views),
-    }
+        for vk in view_keys:
+            view_datasets = views[vk]
+            results = orch.run(view_datasets)
+            if run_insight:
+                print("  Step 1/3: Running InsightAgent...", flush=True)
+                insight_result = orch.run_insight(results, view_datasets, sess.get("datasets", {}))
+                results["insight"] = insight_result
+                print("  Step 2/3: Running RecommenderAgent...", flush=True)
+                rec = RecommenderAgent().run(insight_result["output"], view_datasets, sess.get("datasets", {}))
+                results["recommender"] = rec
+                print("  Step 3/3: Done", flush=True)
+            results_by_view[vk] = results
+
+        sess["results_by_view"] = results_by_view
+        return {
+            "status": "complete",
+            "views": list(results_by_view.keys()),
+            "view_titles": view_titles,
+            "triple_mode": is_triple_view(views),
+        }
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"\n{'='*60}\nPIPELINE CRASHED!\n{tb}\n{'='*60}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {type(e).__name__}: {e}")
 
 
 @app.get("/api/results/{session_id}")
@@ -257,8 +280,19 @@ def get_insight(session_id: str):
     out = {}
     for vk, results in results_by_view.items():
         insight = results.get("insight", {}).get("output", "")
+        out[vk] = {"insight": insight}
+    return {"views": out}
+
+
+@app.get("/api/recommender/{session_id}")
+def get_recommender(session_id: str):
+    sess = sessions.get(session_id)
+    if not sess: raise HTTPException(404, "Session not found")
+    results_by_view = sess.get("results_by_view", {})
+    out = {}
+    for vk, results in results_by_view.items():
         recommender = results.get("recommender", {}).get("output", "")
-        out[vk] = {"insight": insight, "recommender": recommender}
+        out[vk] = {"recommender": recommender}
     return {"views": out}
 
 
@@ -348,12 +382,127 @@ def generate_pdf_report(session_id: str = Form(...), view_key: str = Form("")):
 
 @app.get("/api/llm/status")
 def llm_status():
-    return {"online": check_llm_health()}
+    status = check_llm_health()
+    return {"online": status == "online", "status": status}
 
 
 @app.post("/api/ask")
 def ask_llm(prompt: str = Form(...)):
     return {"response": ask_llama(prompt, "API")}
+
+
+# ─── Interactive Chart Builder ───
+
+def build_interactive_chart(df, x_column, y_column, chart_type, title=None, agg_func="count"):
+    """Build a Plotly figure from user-chosen columns and chart type.
+
+    Parameters
+    ----------
+    agg_func : str
+        How to aggregate y_column when grouped by x_column.
+        One of: count | sum | mean | median | min | max
+        Ignored for scatter/box/histogram where raw values are used.
+    """
+    from agents_core import VisualizerAgent
+    VALID_AGG = {"count", "sum", "mean", "median", "min", "max"}
+    if agg_func not in VALID_AGG:
+        agg_func = "mean"
+
+    if chart_type not in ("histogram", "box", "bar", "line", "scatter", "pie"):
+        raise HTTPException(400, f"Unsupported chart type: {chart_type}")
+
+    style = {"chart_type": chart_type, "color": CHART_PALETTE[0]}
+    fig = VisualizerAgent._make_fig(df, x_column, style,
+                                    y_col=y_column or None,
+                                    agg_func=agg_func)
+    if title:
+        fig = style_fig(fig, title=title)
+    return fig
+
+
+@app.get("/api/data/{session_id}/columns")
+def get_columns(session_id: str):
+    """Return all column names + types per dataset.
+    Falls back to preprocessed/raw datasets if pipeline views not yet available.
+    """
+    sess = sessions.get(session_id)
+    if not sess:
+        raise HTTPException(404, "Session not found")
+    views = sess.get("views", {})
+    view_titles = sess.get("view_titles", {})
+    out = {}
+
+    if views:
+        # Pipeline has run — use views (preferred, has proper grouping)
+        for vk, view_datasets in views.items():
+            ds_info = {}
+            for name, df in view_datasets.items():
+                cols = []
+                for c in df.columns:
+                    if c == "_source":
+                        continue
+                    is_num = is_numeric_dtype(df[c])
+                    cols.append({"name": c, "type": "numeric" if is_num else "categorical"})
+                ds_info[name] = {"columns": cols, "shape": list(df.shape)}
+            out[vk] = {"datasets": ds_info, "title": view_titles.get(vk, vk)}
+    else:
+        # Pipeline not yet run — use preprocessed or raw uploaded datasets
+        fallback = sess.get("preprocessed") or sess.get("datasets") or {}
+        if fallback:
+            ds_info = {}
+            for name, df in fallback.items():
+                cols = []
+                for c in df.columns:
+                    if c == "_source":
+                        continue
+                    is_num = is_numeric_dtype(df[c])
+                    cols.append({"name": c, "type": "numeric" if is_num else "categorical"})
+                ds_info[name] = {"columns": cols, "shape": list(df.shape)}
+            out["unified"] = {"datasets": ds_info, "title": "Uploaded Data"}
+
+    return {"views": out, "view_keys": get_view_keys(views) if views else ["unified"]}
+
+
+@app.post("/api/chart/build")
+def build_chart(
+    session_id: str = Form(...),
+    dataset_name: str = Form(...),
+    x_column: str = Form(...),
+    y_column: str = Form(""),
+    chart_type: str = Form(...),
+    agg_func: str = Form("count"),
+    title: str = Form(""),
+):
+    """Build a custom Plotly chart from user-chosen columns.
+
+    agg_func controls how y_column is aggregated per x group:
+      count | sum | mean | median | min | max
+    """
+    sess = sessions.get(session_id)
+    if not sess:
+        raise HTTPException(404, "Session not found")
+    # Search all view datasets for the requested dataset
+    views = sess.get("views", {})
+    df = None
+    for vk, view_datasets in views.items():
+        if dataset_name in view_datasets:
+            df = view_datasets[dataset_name]
+            break
+    if df is None:
+        datasets = sess.get("preprocessed") or sess.get("datasets", {})
+        df = datasets.get(dataset_name)
+    if df is None:
+        raise HTTPException(404, f"Dataset '{dataset_name}' not found in any view")
+    # Validate columns exist
+    if x_column not in df.columns:
+        raise HTTPException(400, f"X column '{x_column}' not found in dataset '{dataset_name}'")
+    if y_column and y_column not in df.columns:
+        raise HTTPException(400, f"Y column '{y_column}' not found in dataset '{dataset_name}'")
+    if chart_type not in ("histogram", "box", "bar", "line", "scatter", "pie"):
+        raise HTTPException(400, f"Unsupported chart type: {chart_type}")
+    fig = build_interactive_chart(df, x_column, y_column or None, chart_type, title or None, agg_func=agg_func)
+    return {"fig": fig_to_json(fig), "x": x_column, "y": y_column, "type": chart_type,
+            "dataset": dataset_name, "agg_func": agg_func}
 
 
 # Serve frontend as static files — mount AFTER all API routes so they take priority

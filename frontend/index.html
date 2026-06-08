@@ -77,8 +77,104 @@
     </div>
 
     <div id="panel-viz" class="tab-panel hidden">
-      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">📊 Agent-Powered Visualizations</h2>
-      <div id="chartContent"><p style="color:var(--text-muted);">Run the pipeline to see charts.</p></div>
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">📊 Interactive Chart Builder</h2>
+
+      <!-- ── Builder card ── -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title" style="margin-bottom:14px;">🎛️ Build Your Chart
+          <span style="margin-left:auto;font-size:0.7rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">
+            Choose dataset → axes → chart type → build
+          </span>
+        </div>
+
+        <!-- Row 1: Dataset + X + Swap + Y -->
+        <div style="display:grid;grid-template-columns:1fr auto auto 1fr;gap:10px;align-items:end;margin-bottom:12px;">
+          <div>
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">📂 Dataset</label>
+            <select id="chartDataset" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;"></select>
+          </div>
+          <div>
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">X Axis</label>
+            <select id="chartX" style="min-width:150px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;"></select>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:2px;">
+            <label style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px;">swap</label>
+            <button onclick="swapXY()" title="Swap X ↔ Y"
+              style="background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--accent-cyan);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:1rem;line-height:1;">
+              ⇄
+            </button>
+          </div>
+          <div>
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">
+              Y Axis <span id="yOptional" style="color:var(--text-muted);font-size:0.65rem;">(optional)</span>
+            </label>
+            <select id="chartY" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;"></select>
+          </div>
+        </div>
+
+        <!-- Row 2: Chart Type + Aggregation + Title + Build -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;">
+          <div>
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">📊 Chart Type</label>
+            <select id="chartType" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;">
+              <option value="bar">📊 Bar Chart</option>
+              <option value="line">📈 Line Chart</option>
+              <option value="scatter">🔵 Scatter Plot</option>
+              <option value="pie">🥧 Pie Chart</option>
+              <option value="histogram">📊 Histogram</option>
+              <option value="box">📦 Box Plot</option>
+            </select>
+          </div>
+          <div id="chartAggFuncRow">
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">
+              Aggregate Y <span style="color:var(--accent-cyan);font-size:0.65rem;">(when Y is set)</span>
+            </label>
+            <select id="chartAggFunc" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;">
+              <option value="sum">∑ Sum</option>
+              <option value="mean" selected>⌀ Mean</option>
+              <option value="count"># Count</option>
+              <option value="median">~ Median</option>
+              <option value="min">↓ Min</option>
+              <option value="max">↑ Max</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">🏷️ Title (optional)</label>
+            <input type="text" id="chartTitle" placeholder="e.g. Revenue by Region"
+              style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.78rem;" />
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn btn-primary" onclick="buildInteractiveChart()" style="white-space:nowrap;padding:8px 20px;">
+              🔨 Build Chart
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Latest chart preview ── -->
+      <div id="chartBuilderDisplay">
+        <p style="color:var(--text-muted);padding:12px 0;">Select your options above and click "Build Chart".</p>
+      </div>
+
+      <!-- ── Chart history ── -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;">
+        <h3 style="font-family:'Space Grotesk',sans-serif;font-size:0.9rem;color:var(--text-secondary);">📁 Chart History</h3>
+        <button onclick="clearChartHistory()"
+          style="background:none;border:1px solid var(--border-subtle);color:var(--text-muted);border-radius:6px;padding:4px 10px;font-size:0.72rem;cursor:pointer;font-family:'JetBrains Mono',monospace;">
+          🗑 Clear All
+        </button>
+      </div>
+      <div id="chartHistory"></div>
+
+      <!-- ── Auto-generated pipeline charts ── -->
+      <details style="margin-top:24px;border:1px solid var(--border-subtle);border-radius:12px;padding:16px;background:var(--bg-card);">
+        <summary style="cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:0.95rem;font-weight:600;color:var(--text-secondary);">
+          🤖 Auto-Generated Charts (from pipeline)
+        </summary>
+        <div id="chartContent" style="margin-top:12px;">
+          <p style="color:var(--text-muted);">Run the pipeline to see auto-generated charts.</p>
+        </div>
+      </details>
     </div>
 
     <div id="panel-outliers" class="tab-panel hidden">
@@ -104,6 +200,10 @@
 
     <div id="panel-rec" class="tab-panel hidden">
       <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.2rem;margin-bottom:16px;">💡 Smart Recommender System</h2>
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title" style="color:var(--accent-yellow);">📋 AI Recommendations</div>
+        <div id="recContent"><p style="color:var(--text-muted);">Run the pipeline with AI enabled to generate recommendations.</p></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
         <div class="card">
           <div class="card-title">🔍 1. Find Similar Profiles (ML)</div>
@@ -143,6 +243,6 @@
     </footer>
   </main>
 
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=2.0"></script>
 </body>
 </html>

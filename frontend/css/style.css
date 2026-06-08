@@ -311,15 +311,19 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 12px; padding: 12px; margin-bottom: 16px;
-  width: 100%; overflow: hidden;
+  width: 100%; overflow: hidden; min-width: 0;
 }
-.plotly-container .js-plotly-plot, .plotly-container .plot-container,
-.plotly-container .js-plotly-plot svg, .plotly-container .main-svg {
+.plotly-container {
+  width: 100%; min-width: 0; position: relative;
+}
+.plotly-container .js-plotly-plot,
+.plotly-container .plot-container {
   width: 100% !important;
   max-width: 100% !important;
 }
-.plotly-container .js-plotly-plot .cartesianlayer,
-.plotly-container .js-plotly-plot .infolayer {
+.plotly-container .js-plotly-plot svg,
+.plotly-container .main-svg {
+  width: 100% !important;
   max-width: 100% !important;
 }
 .chart-grid {
@@ -328,10 +332,12 @@ body {
   gap: 16px;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
 }
 .chart-grid > * {
   min-width: 0;
   max-width: 100%;
+  width: 100%;
 }
 .chart-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -380,8 +386,8 @@ body {
 .insight-box strong { color: var(--text-primary); }
 
 /* ─── Tables ─── */
-.view-subtabs, .view-group { width: 100%; }
-.view-panel { width: 100%; }
+.view-subtabs, .view-group { width: 100%; min-width: 0; }
+.view-panel { width: 100%; min-width: 0; overflow: hidden; }
 .table-wrap {
   width: 100%; overflow-x: auto;
 }
@@ -457,4 +463,34 @@ body {
   .hero-content { flex-direction: column; text-align: center; }
   .hero-pill { margin: 0 auto; }
   .tabs { overflow-x: auto; }
+}
+
+/* ─── Chart Builder Controls ─── */
+.chart-select, .chart-input, .chart-color {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  box-sizing: border-box;
+}
+.chart-select:focus, .chart-input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.15);
+}
+.chart-color {
+  height: 38px;
+  padding: 2px;
+  cursor: pointer;
+}
+.chart-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.chart-color::-webkit-color-swatch {
+  border: none;
+  border-radius: 6px;
 }

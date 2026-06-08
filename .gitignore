@@ -16,6 +16,9 @@ uploads/
 charts/
 *.pdf
 
+# Auto-generated
+.deps_installed
+
 # IDE
 .vscode/
 .idea/
